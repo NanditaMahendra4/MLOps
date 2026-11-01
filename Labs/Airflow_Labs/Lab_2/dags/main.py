@@ -43,13 +43,13 @@ owner_task = BashOperator(
     dag=dag,
 )
 
-# send_email = EmailOperator(
-#     task_id="send_email",
-#     to="YOUR EMAIL ADDRESS",
-#     subject="Notification from Airflow",
-#     html_content="<p>This is a notification email sent from Airflow.</p>",
-#     dag=dag,
-# )
+send_email = EmailOperator(
+    task_id="send_email",
+    to="nandita.mahendra@gmail.com",
+    subject="Notification from Airflow",
+    html_content="<p>This is a notification email sent from Airflow.</p>",
+    dag=dag,
+)
 
 load_data_task = PythonOperator(
     task_id="load_data_task",
