@@ -102,3 +102,53 @@ Furthermore, the Airflow_Lab2_Flask DAG facilitates the management of a Flask AP
 
 Overall, this project demonstrates the power of Apache Airflow in orchestrating complex workflows and integrating external systems seamlessly. By following the provided instructions and understanding the workflow's structure, users can leverage Airflow to streamline their machine learning pipelines and enhance operational efficiency.
 
+## Modifications in This Version
+
+This version of the lab runs on Airflow 3 in Docker and includes the changes below.
+
+### 1. Model and dataset 
+
+- **Dataset:** replaced the advertising CSV with scikit-learn's built-in Breast Cancer Wisconsin dataset (30 numeric features, binary target). No CSV file or download is needed.
+- **Preprocessing:** the split is now stratified (70/30, `random_state=42`) and a single `StandardScaler` replaces the MinMax + Standard column transformer.
+- **Model:** replaced `LogisticRegression` with `RandomForestClassifier(n_estimators=200, random_state=42)`.
+- **Metrics:** `load_model` now computes accuracy and F1 score, prints them to the task log, and saves them to `/opt/airflow/model/metrics.json`.
+- Function names, arguments, and return types are unchanged, so `dags/main.py` did not need to change.
+
+### 2. Flask app 
+
+- Added a `get_model_metrics()` helper that reads `metrics.json`.
+- Added a `/metrics` route that returns the model name, dataset, accuracy, F1, and test sample count as JSON.
+- The `/success` page now shows Model, Dataset, Accuracy, and F1 rows below the run details.
+- Note: in this version the entry point is `/` (it redirects to `/success` or `/failure`), not `/api`.
+
+### 3. Email notifications
+
+- Enabled the `send_email` task in `dags/main.py` with the recipient set to my own address.
+- In Airflow 3, the SMTP provider reads the connection `smtp_default` (Admin -> Connections) instead of the `[smtp]` section of `airflow.cfg`. Settings used for Gmail: host `smtp.gmail.com`, port `587`, login = Gmail address, password = Gmail app password, with SSL disabled (STARTTLS).
+- The app password is stored in Airflow's database and is not committed to the repository.
+
+## Running with Docker
+
+1. Download the official `docker-compose.yaml` into the lab folder and create the folders and `.env`:
+   ```bash
+   curl -LfO 'https://airflow.apache.org/docs/apache-airflow/stable/docker-compose.yaml'
+   mkdir -p logs plugins
+   echo "AIRFLOW_UID=$(id -u)" > .env
+   echo '_PIP_ADDITIONAL_REQUIREMENTS=flask scikit-learn scipy pandas numpy' >> .env
+   ```
+2. In `docker-compose.yaml`, publish the Flask port on the `airflow-worker` service:
+   ```yaml
+   ports:
+     - "5555:5555"
+   ```
+3. Initialize and start:
+   ```bash
+   docker compose up airflow-init
+   docker compose up -d
+   ```
+4. Open `http://localhost:8080` (login `airflow` / `airflow`), unpause and trigger `Airflow_Lab2`.
+5. After the pipeline finishes, open `http://localhost:5555/` for the status page and `http://localhost:5555/metrics` for the model metrics.
+
+**Notes**
+- The Flask task is a server and stays in the running state. Starting a second Flask run while one is active fails because port 5555 is already in use. Run `docker compose restart airflow-worker` before a fresh test.
+- Do not use `docker compose down -v` unless you want to delete the database and the `smtp_default` connection.
