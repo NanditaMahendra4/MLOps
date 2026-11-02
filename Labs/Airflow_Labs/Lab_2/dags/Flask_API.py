@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import time
 import base64
+import json
 import pendulum
 import logging
 import requests
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
-from flask import Flask, redirect, render_template
+from flask import Flask, redirect, render_template, jsonify
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ WEBSERVER = os.getenv("AIRFLOW_WEBSERVER", "http://airflow-apiserver:8080")
 AF_USER   = os.getenv("AIRFLOW_USERNAME", "airflow")
 AF_PASS   = os.getenv("AIRFLOW_PASSWORD", "airflow")
 TARGET_DAG_ID = os.getenv("TARGET_DAG_ID", "Airflow_Lab2")
+METRICS_PATH = os.getenv("METRICS_PATH", "/opt/airflow/model/metrics.json")
 
 # Set up robust paths for Docker Workers
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -112,7 +114,14 @@ def get_latest_run_info():
     except Exception as e:
         info["note"] = f"Network issue: {str(e)}"
         return False, info
-
+    
+def get_model_metrics():
+    """Read metrics.json written by load_model(). Returns {} if not available."""
+    try:
+        with open(METRICS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 @app.route("/")
 def index():
@@ -122,7 +131,7 @@ def index():
 @app.route("/success")
 def success():
     _, info = get_latest_run_info()
-    return render_template("success.html", **info)
+    return render_template("success.html", metrics=get_model_metrics(), **info)
 
 @app.route("/failure")
 def failure():
@@ -132,6 +141,13 @@ def failure():
 @app.route("/health")
 def health():
     return "ok", 200
+
+@app.route("/metrics")
+def metrics():
+    data = get_model_metrics()
+    if not data:
+        return jsonify({"error": "metrics not available yet"}), 404
+    return jsonify(data)
 
 def start_flask_app():
     """
