@@ -1,10 +1,13 @@
 # File: src/model_development.py
 import os
 import pickle
+import json
 import pandas as pd
-from sklearn.compose import make_column_transformer
-from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import load_breast_cancer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 WORKING_DIR = "/opt/airflow/working_data"
@@ -17,12 +20,8 @@ def load_data() -> str:
     Load CSV and persist raw dataframe to a pickle file.
     Returns path to saved file.
     """
-    csv_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "data",
-        "advertising.csv",
-    )
-    df = pd.read_csv(csv_path)
+    
+    df = load_breast_cancer(as_frame=True).frame
 
     out_path = os.path.join(WORKING_DIR, "raw.pkl")
     with open(out_path, "wb") as f:
@@ -37,32 +36,16 @@ def data_preprocessing(file_path: str) -> str:
     with open(file_path, "rb") as f:
         df = pickle.load(f)
 
-    X = df.drop(
-        ["Timestamp", "Clicked on Ad", "Ad Topic Line", "Country", "City"],
-        axis=1,
-    )
-    y = df["Clicked on Ad"]
+    X = df.drop("target", axis=1)
+    y = df["target"]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=42
+        X, y, test_size=0.3, random_state=42, stratify=y
     )
 
-    num_columns = [
-        "Daily Time Spent on Site",
-        "Age",
-        "Area Income",
-        "Daily Internet Usage",
-        "Male",
-    ]
-
-    ct = make_column_transformer(
-        (MinMaxScaler(), num_columns),
-        (StandardScaler(), num_columns),
-        remainder="passthrough",
-    )
-
-    X_train_tr = ct.fit_transform(X_train)
-    X_test_tr = ct.transform(X_test)
+    scaler = StandardScaler()
+    X_train_tr = scaler.fit_transform(X_train)
+    X_test_tr = scaler.transform(X_test)
 
     out_path = os.path.join(WORKING_DIR, "preprocessed.pkl")
     with open(out_path, "wb") as f:
@@ -77,12 +60,12 @@ def separate_data_outputs(file_path: str) -> str:
 
 def build_model(file_path: str, filename: str) -> str:
     """
-    Train LR model and save to MODEL_DIR/filename. Returns model path.
+    Train RandomForestClassifier model and save to MODEL_DIR/filename. Returns model path.
     """
     with open(file_path, "rb") as f:
         X_train, X_test, y_train, y_test = pickle.load(f)
 
-    model = LogisticRegression()
+    model = RandomForestClassifier(n_estimators=200, random_state=42)
     model.fit(X_train, y_train)
 
     model_path = os.path.join(MODEL_DIR, filename)
@@ -102,8 +85,18 @@ def load_model(file_path: str, filename: str) -> int:
     with open(model_path, "rb") as f:
         model = pickle.load(f)
 
-    score = model.score(X_test, y_test)
-    print(f"Model score on test data: {score}")
-
     pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, pred)
+    f1 = f1_score(y_test, pred)
+    print(f"Model: RandomForestClassifier | Accuracy: {accuracy:.4f} | F1: {f1:.4f}")
+
+    metrics = {
+        "model": "RandomForestClassifier",
+        "dataset": "Breast Cancer Wisconsin (scikit-learn)",
+        "accuracy": round(float(accuracy), 4),
+        "f1": round(float(f1), 4),
+        "test_samples": int(len(y_test)),
+    }
+    with open(os.path.join(MODEL_DIR, "metrics.json"), "w") as f:
+        json.dump(metrics, f)
     return int(pred[0])
