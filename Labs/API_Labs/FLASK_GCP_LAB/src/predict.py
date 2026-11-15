@@ -1,19 +1,18 @@
 import numpy as np
 import joblib
-import os
-from train import run_training
 
-# Load the trained model
 model = joblib.load("model/model.pkl")
 
-def predict_iris(sepal_length, sepal_width, petal_length, petal_width):
-    input_data = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
-    prediction = model.predict(input_data)
-    return prediction[0]
+FEATURES = [
+    "alcohol", "malic_acid", "ash", "alcalinity_of_ash", "magnesium",
+    "total_phenols", "flavanoids", "nonflavanoid_phenols",
+    "proanthocyanins", "color_intensity", "hue",
+    "od280_od315", "proline",
+]
 
-if __name__ == "__main__":
-    if os.path.exists("model/model.pkl"):
-        print("Model loaded successfully")
-    else:
-        os.makedirs("model", exist_ok=True)
-        run_training()
+def predict_wine(values):
+    """values: dict with the 13 feature names above."""
+    row = np.array([[float(values[f]) for f in FEATURES]])
+    pred = int(model.predict(row)[0])
+    confidence = float(model.predict_proba(row)[0].max())
+    return pred, confidence
